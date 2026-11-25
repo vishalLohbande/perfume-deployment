@@ -41,26 +41,30 @@ services:
 
 
   # =========================================
-  # 2. SERVICE REGISTRY - Eureka Server
-  # =========================================
-  service-registry:
-    image: ${DOCKERHUB_USERNAME}/perfume-service-registry:latest
-    container_name: perfume-service-registry
+# =========================================
+# 2. SERVICE REGISTRY - Eureka Server
+# =========================================
+service-registry:
+  image: ${DOCKERHUB_USERNAME}/perfume-service-registry:latest
+  container_name: perfume-service-registry
 
-    environment:
-      SPRING_PROFILES_ACTIVE: pod
+  ports:
+    - "8761:8761"
 
-    networks:
-      - perfume-network
+  environment:
+    SPRING_PROFILES_ACTIVE: pod
 
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 40s
+  networks:
+    - perfume-network
 
-    restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+    interval: 15s
+    timeout: 10s
+    retries: 10
+    start_period: 40s
+
+  restart: unless-stopped
 
 
   # =========================================
