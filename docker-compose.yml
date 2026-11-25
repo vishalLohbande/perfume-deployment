@@ -1,0 +1,235 @@
+
+services:
+
+  # =========================================
+  # 1. KAFKA - KRaft Mode
+  # =========================================
+  kafka:
+    image: apache/kafka:4.1.1
+    container_name: perfume-kafka
+    hostname: kafka
+
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+    networks:
+      - perfume-network
+
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+    restart: unless-stopped
+
+
+  # =========================================
+  # 2. SERVICE REGISTRY - Eureka Server
+  # =========================================
+  service-registry:
+    image: ${DOCKERHUB_USERNAME}/perfume-service-registry:latest
+    container_name: perfume-service-registry
+
+    environment:
+      SPRING_PROFILES_ACTIVE: pod
+
+    networks:
+      - perfume-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+    restart: unless-stopped
+
+
+  # =========================================
+  # 3. PRODUCT SERVICE
+  # =========================================
+  product-service:
+    image: ${DOCKERHUB_USERNAME}/perfume-product-service:latest
+    container_name: perfume-product-service
+
+    environment:
+      SPRING_PROFILES_ACTIVE: pod
+      PRODUCT_DB_URL: ${PRODUCT_DB_URL}
+      PRODUCT_DB_USERNAME: ${PRODUCT_DB_USERNAME}
+      PRODUCT_DB_PASSWORD: ${PRODUCT_DB_PASSWORD}
+
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+    networks:
+      - perfume-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 50s
+
+    restart: unless-stopped
+
+
+  # =========================================
+  # 4. USER SERVICE
+  # =========================================
+  user-service:
+    image: ${DOCKERHUB_USERNAME}/perfume-user-service:latest
+    container_name: perfume-user-service
+
+    environment:
+      SPRING_PROFILES_ACTIVE: pod
+      USER_DB_URL: ${USER_DB_URL}
+      USER_DB_USERNAME: ${USER_DB_USERNAME}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD}
+
+    depends_on:
+      service-registry:
+        condition: service_healthy
+
+    networks:
+      - perfume-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 50s
+
+    restart: unless-stopped
+
+
+  # =========================================
+  # 5. ORDER SERVICE
+  # =========================================
+  order-service:
+    image: ${DOCKERHUB_USERNAME}/perfume-order-service:latest
+    container_name: perfume-order-service
+
+    environment:
+      SPRING_PROFILES_ACTIVE: pod
+      ORDER_DB_URL: ${ORDER_DB_URL}
+      ORDER_DB_USERNAME: ${ORDER_DB_USERNAME}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD}
+
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+    networks:
+      - perfume-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 50s
+
+    restart: unless-stopped
+
+
+  # =========================================
+  # 6. NOTIFICATION SERVICE
+  # =========================================
+  notification-service:
+    image: ${DOCKERHUB_USERNAME}/perfume-notification-service:latest
+    container_name: perfume-notification-service
+
+    environment:
+      SPRING_PROFILES_ACTIVE: pod
+
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+    networks:
+      - perfume-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 50s
+
+    restart: unless-stopped
+
+
+  # =========================================
+  # 7. API GATEWAY
+  # =========================================
+  api-gateway:
+    image: ${DOCKERHUB_USERNAME}/perfume-api-gateway:latest
+    container_name: perfume-api-gateway
+
+    environment:
+      SPRING_PROFILES_ACTIVE: pod
+
+    depends_on:
+      service-registry:
+        condition: service_healthy
+
+    ports:
+      - "8080:8080"
+
+    networks:
+      - perfume-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 50s
+
+    restart: unless-stopped
+
+
+# =========================================
+# NETWORK
+# =========================================
+networks:
+  perfume-network:
+    driver: bridge
+
+
+# =========================================
+# PERSISTENT VOLUMES
+# =========================================
+volumes:
+  kafka-data:

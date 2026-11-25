@@ -1,0 +1,19 @@
+# Environment secrets
+.env
+
+# SSH private keys
+*.pem
+*.key
+id_rsa
+id_ed25519
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+.DS_Store
+
+# IDE files
+.idea/
+.vscode/
